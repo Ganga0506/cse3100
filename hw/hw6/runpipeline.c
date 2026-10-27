@@ -70,6 +70,42 @@ typedef struct program_tag {
 void start_program(Program *programs, int num_programs, int cur) 
 {
     // TODO
+    int pid = fork();
+ 
+    if (pid < 0)
+        die("fork() failed.");
+ 
+    if (pid == 0) {
+        if (programs[cur].fd_in >= 0) {
+            if (dup2(programs[cur].fd_in, FD_STDIN) < 0)
+                die("dup2() failed.");
+        }
+        if (programs[cur].fd_out >= 0) {
+            if (dup2(programs[cur].fd_out, FD_STDOUT) < 0)
+                die("dup2() failed.");
+        }
+ 
+        for (int i = 0; i < num_programs; i ++) {
+            if (programs[i].fd_in >= 0)
+                close(programs[i].fd_in);
+            if (programs[i].fd_out >= 0)
+                close(programs[i].fd_out);
+        }
+ 
+        execvp(programs[cur].argv[0], programs[cur].argv);
+        die("execvp() failed.");
+    }
+
+    programs[cur].pid = pid;
+ 
+    if (programs[cur].fd_in >= 0) {
+        close(programs[cur].fd_in);
+        programs[cur].fd_in = -1;
+    }
+    if (programs[cur].fd_out >= 0) {
+        close(programs[cur].fd_out);
+        programs[cur].fd_out = -1;
+    }
 }
 
 /* Wait on a program. 
@@ -91,6 +127,9 @@ int wait_on_program(Program *prog)
         return -1;
 
     // TODO
+    if (waitpid(prog->pid, &exitStatus, 0) == -1)
+        return -1;
+
     return WEXITSTATUS(exitStatus);
 }
 
@@ -112,6 +151,15 @@ int wait_on_program(Program *prog)
 void prepare_pipes(Program *programs, int num_programs)
 {
     // TODO
+
+    for (int i = 0; i < num_programs - 1; i ++) {
+        int fd[2];
+        if (pipe(fd) == -1)
+            die("pipe() failed.");
+ 
+        programs[i].fd_out = fd[PIPEFD_WRITE];
+        programs[i + 1].fd_in = fd[PIPEFD_READ];
+    }
 }
 
 /*********************************************************/

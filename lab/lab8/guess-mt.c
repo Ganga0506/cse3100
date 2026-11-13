@@ -163,6 +163,30 @@ void * thread_c(void * arg_in)
     //      call gmn_check() 
     //      send the result and, if the guess is correct, the final message to thread_p
 
+    pthread_mutex_lock(&arg->mutex);
+    arg->max = gmn_get_max();
+    arg->status = S_RESULT;
+    pthread_cond_signal(&arg->cond_result);
+    pthread_mutex_unlock(&arg->mutex);
+
+    int result;
+    do {
+        pthread_mutex_lock(&arg->mutex);
+
+        while (arg->status != S_GUESS)
+            pthread_cond_wait(&arg->cond_guess, &arg->mutex);
+
+        result = gmn_check(&gmn, arg->guess);
+
+        arg->result = result;
+        if (result == 0)
+            strcpy(arg->message, gmn_get_message(&gmn));
+        arg->status = S_RESULT;
+        pthread_cond_signal(&arg->cond_result);
+
+        pthread_mutex_unlock(&arg->mutex);
+    } while (result != 0);
+
     return NULL;
 }
 
@@ -183,6 +207,12 @@ void * thread_p(void *arg_in)
     // TODO
     //      get max from thread_c
 
+    pthread_mutex_lock(&arg->mutex);
+    while (arg->status != S_RESULT)
+        pthread_cond_wait(&arg->cond_result, &arg->mutex);
+    max = arg->max;
+    pthread_mutex_unlock(&arg->mutex);
+
     do { 
         guess = (min + max)/2;
         printf("My guess: %d\n", guess);
@@ -190,6 +220,16 @@ void * thread_p(void *arg_in)
         // TODO
         //     send guess to thread_c
         //     wait for the result from thread_c (copy arg->result to result!)
+
+        pthread_mutex_lock(&arg->mutex);
+        arg->guess = guess;
+        arg->status = S_GUESS;
+        pthread_cond_signal(&arg->cond_guess);
+
+        while (arg->status != S_RESULT)
+            pthread_cond_wait(&arg->cond_result, &arg->mutex);
+        result = arg->result;
+        pthread_mutex_unlock(&arg->mutex);
 
         if (result > 0)
             min = guess + 1;
@@ -234,6 +274,31 @@ int main(int argc, char *argv[])
 
     // TODO
     // Create the two threads and wait for them to finish
+
+    pthread_t tc, tp;
+    int rv;
+
+    arg.status = S_INIT;
+    rv = pthread_mutex_init(&arg.mutex, NULL);
+    check_pthread_return(rv, "pthread_mutex_init");
+    rv = pthread_cond_init(&arg.cond_guess, NULL);
+    check_pthread_return(rv, "pthread_cond_init");
+    rv = pthread_cond_init(&arg.cond_result, NULL);
+    check_pthread_return(rv, "pthread_cond_init");
+
+    rv = pthread_create(&tc, NULL, thread_c, &arg);
+    check_pthread_return(rv, "pthread_create");
+    rv = pthread_create(&tp, NULL, thread_p, &arg);
+    check_pthread_return(rv, "pthread_create");
+
+    rv = pthread_join(tc, NULL);
+    check_pthread_return(rv, "pthread_join");
+    rv = pthread_join(tp, NULL);
+    check_pthread_return(rv, "pthread_join");
+
+    pthread_mutex_destroy(&arg.mutex);
+    pthread_cond_destroy(&arg.cond_guess);
+    pthread_cond_destroy(&arg.cond_result);
 
     
     return 0;

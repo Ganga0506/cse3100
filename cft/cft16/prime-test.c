@@ -92,7 +92,7 @@ void * consumer(void *t)
             if ((pdata->data % p) == 0) 
             {
                 //fill in the code below
-                printf("%d is not a prime number.\n", pdata->data);
+                printf("%d is not a prime.\n", pdata->data);
                 pdata->ready = 0;
                 pthread_cond_signal(&pdata->processed_cond);
 
@@ -103,7 +103,7 @@ void * consumer(void *t)
                 //fill in the code below
                 SET_BIT(pdata->checked, my_id);
                 if (pdata->checked == FLAG) {
-                    printf("%d is a prime number.\n", pdata->data);
+                    printf("%d is a prime.\n", pdata->data);
                     pdata->ready = 0;
                     pthread_cond_signal(&pdata->processed_cond);
 
